@@ -361,9 +361,13 @@ function buildConfirmationMessage(r) {
 // to the customer. Used by both the 2-day alert quick-actions and the
 // regular status dropdown in the Reservations admin list.
 async function confirmReservationAndNotify(r, onDone) {
+  // Open the tab synchronously (still inside the click's user-gesture),
+  // then navigate it once the update finishes — opening it after the
+  // `await` would get silently blocked as a pop-up by most browsers.
+  const win = window.open("", "_blank", "noopener,noreferrer");
   await supabase.from("reservations").update({ status: "Confirmada" }).eq("id", r.id);
   onDone?.();
-  window.open(whatsappLink(r.whatsapp, buildConfirmationMessage(r)), "_blank", "noopener,noreferrer");
+  if (win) win.location.href = whatsappLink(r.whatsapp, buildConfirmationMessage(r));
 }
 
 // Message sent to the customer when the admin cancels their reservation.
@@ -374,9 +378,10 @@ function buildCancellationMessage(r) {
 
 // Same pattern as confirmReservationAndNotify, but for cancellations.
 async function cancelReservationAndNotify(r, onDone) {
+  const win = window.open("", "_blank", "noopener,noreferrer");
   await supabase.from("reservations").update({ status: "Cancelada" }).eq("id", r.id);
   onDone?.();
-  window.open(whatsappLink(r.whatsapp, buildCancellationMessage(r)), "_blank", "noopener,noreferrer");
+  if (win) win.location.href = whatsappLink(r.whatsapp, buildCancellationMessage(r));
 }
 
 // Message sent to the customer once their reservation is marked Finalizada
@@ -388,9 +393,10 @@ function buildFinalizationMessage(r) {
 
 // Same pattern as confirmReservationAndNotify, but for finalized reservations.
 async function finalizeReservationAndNotify(r, onDone) {
+  const win = window.open("", "_blank", "noopener,noreferrer");
   await supabase.from("reservations").update({ status: "Finalizada" }).eq("id", r.id);
   onDone?.();
-  window.open(whatsappLink(r.whatsapp, buildFinalizationMessage(r)), "_blank", "noopener,noreferrer");
+  if (win) win.location.href = whatsappLink(r.whatsapp, buildFinalizationMessage(r));
 }
 
 function StatusBadge({ status }) {
