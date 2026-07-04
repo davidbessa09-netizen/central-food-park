@@ -350,6 +350,22 @@ function buildStaffNotification(r) {
   return `🔔 Nova reserva pelo site!\n\nResponsável: ${r.responsavel}\nWhatsApp: ${r.whatsapp}\nAniversariante: ${r.aniversariante || "-"}\nPacote: ${pkg?.name || ""}\nData desejada: ${r.data ? new Date(r.data + "T12:00:00").toLocaleDateString("pt-BR") : ""}\nHorário: ${r.horario || "-"}\nConvidados: ${(r.adultos||0) + (r.criancas||0)} (${r.adultos||0} adultos + ${r.criancas||0} crianças)\nEspaço: ${r.espaco || "A definir"}\nValor: ${r.valor > 0 ? "R$ " + r.valor.toLocaleString("pt-BR") : "Gratuito"}`;
 }
 
+// Message sent to the customer once the admin confirms their reservation.
+function buildConfirmationMessage(r) {
+  const pkg = PACKAGES.find(p => p.id === r.pacote);
+  return `✅ Reserva confirmada!\n\nOlá ${r.responsavel}, sua reserva no Central Food Park está confirmada!\n\nPacote: ${pkg?.name || ""}\nData: ${r.data ? new Date(r.data + "T12:00:00").toLocaleDateString("pt-BR") : ""}\nHorário: ${r.horario || "-"}\nEspaço: ${r.espaco_nome || r.espaco || "-"}\n\nEstamos ansiosos para receber vocês! 🎉\n\nCentral Food Park`;
+}
+
+// Shared "confirm" action: marks the reservation as Confirmada in the
+// database and opens WhatsApp with the confirmation message ready to send
+// to the customer. Used by both the 2-day alert quick-actions and the
+// regular status dropdown in the Reservations admin list.
+async function confirmReservationAndNotify(r, onDone) {
+  await supabase.from("reservations").update({ status: "Confirmada" }).eq("id", r.id);
+  onDone?.();
+  window.open(whatsappLink(r.whatsapp, buildConfirmationMessage(r)), "_blank", "noopener,noreferrer");
+}
+
 function StatusBadge({ status }) {
   const c = STATUS_COLORS[status] || { bg:"#F3F4F6", text:"#374151", dot:"#9CA3AF" };
   return (
@@ -437,7 +453,7 @@ function LoginPage({ onNavigate }) {
   );
 }
 
-function AlertBanner({ reservations }) {
+function AlertBanner({ reservations, onConfirmed }) {
   const today = new Date();
   const in2days = new Date(today);
   in2days.setDate(today.getDate() + 2);
@@ -447,22 +463,20 @@ function AlertBanner({ reservations }) {
   return (
     <div style={{ margin:"0 16px 8px", background:"linear-gradient(135deg,#78350F,#92400E)", border:"1.5px solid #F59E0B", borderRadius:14, padding:14 }}>
       <div style={{ color:"#FCD34D", fontWeight:800, fontSize:14, marginBottom:6 }}>
-        ⏰ {alerts.length} reserva{alerts.length>1?"s":""} daqui 2 dias — envie a confirmação!
+        ⏰ {alerts.length} reserva{alerts.length>1?"s":""} daqui 2 dias — confirme agora!
       </div>
       {alerts.map(r => {
         const pkg = PACKAGES.find(p => p.id === r.pacote);
-        const msg = buildMessage(r);
-        const link = whatsappLink(r.whatsapp, msg);
         return (
           <div key={r.id} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", background:"rgba(0,0,0,0.25)", borderRadius:8, padding:"8px 10px", marginBottom:6 }}>
             <div>
               <div style={{ color:"#FEF3C7", fontWeight:700, fontSize:13 }}>{r.aniversariante} · {r.responsavel}</div>
               <div style={{ color:"#FCD34D", fontSize:11 }}>{pkg?.emoji} {pkg?.name}</div>
             </div>
-            <a href={link} target="_blank" rel="noreferrer"
-              style={{ background:"#25D366", borderRadius:8, padding:"7px 12px", color:"#fff", fontWeight:800, fontSize:12, textDecoration:"none", flexShrink:0 }}>
-              📱 Enviar
-            </a>
+            <button onClick={() => confirmReservationAndNotify(r, onConfirmed)}
+              style={{ background:"#25D366", border:"none", borderRadius:8, padding:"7px 12px", color:"#fff", fontWeight:800, fontSize:12, cursor:"pointer", flexShrink:0 }}>
+              ✅ Confirmar
+            </button>
           </div>
         );
       })}
@@ -470,7 +484,7 @@ function AlertBanner({ reservations }) {
   );
 }
 
-function Home({ onNavigate, reservations, isAdmin, onLogout }) {
+function Home({ onNavigate, reservations, isAdmin, onLogout, onReservationsChange }) {
   return (
     <div style={{ minHeight:"100vh", background:"linear-gradient(135deg,#1a1a2e 0%,#16213e 50%,#0f3460 100%)" }}>
       {/* Hero */}
@@ -514,7 +528,7 @@ function Home({ onNavigate, reservations, isAdmin, onLogout }) {
       </div>
 
       {/* 2-day alert on home (admin only — shows customer contact info) */}
-      {isAdmin && <AlertBanner reservations={reservations} />}
+      {isAdmin && <AlertBanner reservations={reservations} onConfirmed={onReservationsChange} />}
 
       {/* Nav pills */}
       <div style={{ display:"flex", gap:8, padding:"0 16px 32px", overflowX:"auto" }}>
@@ -1097,6 +1111,10 @@ function Reservations({ reservations, onStatusChange, onNavigate }) {
   });
 
   async function updateStatus(id, status) {
+    if (status === "Confirmada") {
+      const r = reservations.find(x => x.id === id);
+      if (r) { await confirmReservationAndNotify(r, onStatusChange); return; }
+    }
     await supabase.from("reservations").update({ status }).eq("id", id);
     onStatusChange?.();
   }
@@ -1133,8 +1151,6 @@ function Reservations({ reservations, onStatusChange, onNavigate }) {
           </div>
           {alertRes.map(r => {
             const pkg = PACKAGES.find(p => p.id === r.pacote);
-            const msg = buildMessage(r);
-            const link = whatsappLink(r.whatsapp, msg);
             return (
               <div key={r.id} style={{ background:"rgba(0,0,0,0.3)", borderRadius:10, padding:12, marginBottom:8, display:"flex", alignItems:"center", justifyContent:"space-between", gap:10 }}>
                 <div>
@@ -1142,10 +1158,10 @@ function Reservations({ reservations, onStatusChange, onNavigate }) {
                   <div style={{ color:"#FCD34D", fontSize:12 }}>{r.responsavel} · {pkg?.emoji} {pkg?.name}</div>
                   <div style={{ color:"#F59E0B", fontSize:11, marginTop:2 }}>📅 {r.data ? new Date(r.data+"T12:00:00").toLocaleDateString("pt-BR") : ""} às {r.horario}</div>
                 </div>
-                <a href={link} target="_blank" rel="noreferrer"
-                  style={{ background:"#25D366", borderRadius:10, padding:"8px 12px", color:"#fff", fontWeight:800, fontSize:12, textDecoration:"none", whiteSpace:"nowrap", flexShrink:0 }}>
-                  📱 Confirmar
-                </a>
+                <button onClick={() => confirmReservationAndNotify(r, onStatusChange)}
+                  style={{ background:"#25D366", border:"none", borderRadius:10, padding:"8px 12px", color:"#fff", fontWeight:800, fontSize:12, cursor:"pointer", whiteSpace:"nowrap", flexShrink:0 }}>
+                  ✅ Confirmar
+                </button>
               </div>
             );
           })}
@@ -1359,7 +1375,7 @@ export default function App() {
     onNavigate("home");
   }
 
-  if (page === "home")        return <Home onNavigate={onNavigate} reservations={reservations} isAdmin={isAdmin} onLogout={handleLogout} />;
+  if (page === "home")        return <Home onNavigate={onNavigate} reservations={reservations} isAdmin={isAdmin} onLogout={handleLogout} onReservationsChange={() => { refreshReservations(); refreshAvailability(); }} />;
   if (page === "package")     return <PackagePage packageId={params.packageId} onNavigate={onNavigate} />;
   if (page === "booking")     return <BookingForm packageId={params.packageId} availability={availability} blockedDates={blockedDates} onBooked={refreshAvailability} onNavigate={onNavigate} />;
   if (page === "calendar")    return isAdmin ? <Calendar reservations={reservations} blockedDates={blockedDates} onBlockedChange={() => { refreshBlockedDates(); refreshAvailability(); }} onNavigate={onNavigate} /> : <LoginPage onNavigate={onNavigate} />;
