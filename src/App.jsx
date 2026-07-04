@@ -692,7 +692,13 @@ function BookingForm({ packageId, availability, blockedDates, onBooked, onNaviga
     };
 
     setSending(true);
-    const { data, error } = await supabase.from("reservations").insert(payload).select().single();
+    // Deliberately not using `.select()`: anon has no SELECT policy on
+    // reservations (by design, so visitors can't read other customers'
+    // data), and Postgres requires SELECT-visibility for INSERT...RETURNING,
+    // which would otherwise fail with a misleading RLS error even though
+    // the insert itself is allowed. We already have everything we need
+    // locally in `payload` for the success screen.
+    const { error } = await supabase.from("reservations").insert(payload);
     setSending(false);
 
     if (error) {
@@ -703,7 +709,7 @@ function BookingForm({ packageId, availability, blockedDates, onBooked, onNaviga
       }
       return;
     }
-    setNewRes(data);
+    setNewRes(payload);
     setSubmitted(true);
     onBooked?.();
   }
