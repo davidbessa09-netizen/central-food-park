@@ -379,6 +379,20 @@ async function cancelReservationAndNotify(r, onDone) {
   window.open(whatsappLink(r.whatsapp, buildCancellationMessage(r)), "_blank", "noopener,noreferrer");
 }
 
+// Message sent to the customer once their reservation is marked Finalizada
+// (the event already happened).
+function buildFinalizationMessage(r) {
+  const pkg = PACKAGES.find(p => p.id === r.pacote);
+  return `🎉 Obrigado por escolher o Central Food Park!\n\nOlá ${r.responsavel}, esperamos que ${r.aniversariante ? r.aniversariante : "vocês"} tenham aproveitado muito a comemoração${pkg?.name ? ` (${pkg.name})` : ""}!\n\nFoi um prazer receber vocês. Esperamos ver todos de novo em breve! 🎊\n\nCentral Food Park`;
+}
+
+// Same pattern as confirmReservationAndNotify, but for finalized reservations.
+async function finalizeReservationAndNotify(r, onDone) {
+  await supabase.from("reservations").update({ status: "Finalizada" }).eq("id", r.id);
+  onDone?.();
+  window.open(whatsappLink(r.whatsapp, buildFinalizationMessage(r)), "_blank", "noopener,noreferrer");
+}
+
 function StatusBadge({ status }) {
   const c = STATUS_COLORS[status] || { bg:"#F3F4F6", text:"#374151", dot:"#9CA3AF" };
   return (
@@ -1131,6 +1145,10 @@ function Reservations({ reservations, onStatusChange, onNavigate }) {
     if (status === "Cancelada") {
       const r = reservations.find(x => x.id === id);
       if (r) { await cancelReservationAndNotify(r, onStatusChange); return; }
+    }
+    if (status === "Finalizada") {
+      const r = reservations.find(x => x.id === id);
+      if (r) { await finalizeReservationAndNotify(r, onStatusChange); return; }
     }
     await supabase.from("reservations").update({ status }).eq("id", id);
     onStatusChange?.();
