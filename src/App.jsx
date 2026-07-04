@@ -366,6 +366,19 @@ async function confirmReservationAndNotify(r, onDone) {
   window.open(whatsappLink(r.whatsapp, buildConfirmationMessage(r)), "_blank", "noopener,noreferrer");
 }
 
+// Message sent to the customer when the admin cancels their reservation.
+function buildCancellationMessage(r) {
+  const pkg = PACKAGES.find(p => p.id === r.pacote);
+  return `❌ Reserva cancelada\n\nOlá ${r.responsavel}, sua reserva no Central Food Park foi cancelada.\n\nPacote: ${pkg?.name || ""}\nData: ${r.data ? new Date(r.data + "T12:00:00").toLocaleDateString("pt-BR") : ""}\n\nSe isso foi um engano ou você quiser reagendar, é só chamar a gente por aqui.\n\nCentral Food Park`;
+}
+
+// Same pattern as confirmReservationAndNotify, but for cancellations.
+async function cancelReservationAndNotify(r, onDone) {
+  await supabase.from("reservations").update({ status: "Cancelada" }).eq("id", r.id);
+  onDone?.();
+  window.open(whatsappLink(r.whatsapp, buildCancellationMessage(r)), "_blank", "noopener,noreferrer");
+}
+
 function StatusBadge({ status }) {
   const c = STATUS_COLORS[status] || { bg:"#F3F4F6", text:"#374151", dot:"#9CA3AF" };
   return (
@@ -458,7 +471,7 @@ function AlertBanner({ reservations, onConfirmed }) {
   const in2days = new Date(today);
   in2days.setDate(today.getDate() + 2);
   const in2str = in2days.toISOString().split("T")[0];
-  const alerts = reservations.filter(r => r.data === in2str && r.status !== "Cancelada" && r.status !== "Finalizada");
+  const alerts = reservations.filter(r => r.data === in2str && r.status !== "Cancelada" && r.status !== "Finalizada" && r.status !== "Confirmada");
   if (alerts.length === 0) return null;
   return (
     <div style={{ margin:"0 16px 8px", background:"linear-gradient(135deg,#78350F,#92400E)", border:"1.5px solid #F59E0B", borderRadius:14, padding:14 }}>
@@ -1102,7 +1115,7 @@ function Reservations({ reservations, onStatusChange, onNavigate }) {
   const in2days = new Date(today);
   in2days.setDate(today.getDate() + 2);
   const in2str = in2days.toISOString().split("T")[0];
-  const alertRes = reservations.filter(r => r.data === in2str && r.status !== "Cancelada" && r.status !== "Finalizada");
+  const alertRes = reservations.filter(r => r.data === in2str && r.status !== "Cancelada" && r.status !== "Finalizada" && r.status !== "Confirmada");
   const filtered = reservations.filter(r => {
     const matchStatus = filter === "Todas" || r.status === filter;
     const q = search.toLowerCase();
@@ -1114,6 +1127,10 @@ function Reservations({ reservations, onStatusChange, onNavigate }) {
     if (status === "Confirmada") {
       const r = reservations.find(x => x.id === id);
       if (r) { await confirmReservationAndNotify(r, onStatusChange); return; }
+    }
+    if (status === "Cancelada") {
+      const r = reservations.find(x => x.id === id);
+      if (r) { await cancelReservationAndNotify(r, onStatusChange); return; }
     }
     await supabase.from("reservations").update({ status }).eq("id", id);
     onStatusChange?.();
