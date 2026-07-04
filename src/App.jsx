@@ -1,6 +1,11 @@
 import { useState, useEffect } from "react";
 import { supabase } from "./lib/supabaseClient";
 
+// Single source of truth for the business's WhatsApp number — used for the
+// PIX confirmation text, the "Falar com Atendente" link, and the
+// new-reservation notification copy sent from the booking success screen.
+const BUSINESS_WHATSAPP = "(48) 99653-1583";
+
 // ── DATA ────────────────────────────────────────────────────────────────────
 
 const PACKAGES = [
@@ -336,6 +341,13 @@ function buildMessage(r) {
     ? "Nossa equipe irá confirmar a disponibilidade da data e o recebimento do pagamento da reserva."
     : "Nossa equipe irá confirmar a disponibilidade da data e retornar com a confirmação da sua reserva.";
   return `Olá! Seja bem-vindo ao Central Food Park 🎉\n\nRecebemos sua solicitação de reserva.\n\nPacote escolhido: ${pkg?.name || ""}\nData desejada: ${r.data ? new Date(r.data + "T12:00:00").toLocaleDateString("pt-BR") : ""}\nHorário: ${r.horario}\nQuantidade de convidados: ${(r.adultos||0) + (r.criancas||0)} (${r.adultos||0} adultos + ${r.criancas||0} crianças)\nEspaço reservado: ${r.espaco || "A definir"}\n\n${proximoPasso}\n\nCentral Food Park\nO lugar perfeito para comemorar momentos especiais! 🎊`;
+}
+
+// Notification copy sent (by the customer, with one tap) to the business's
+// own WhatsApp number, so staff find out about a new reservation right away.
+function buildStaffNotification(r) {
+  const pkg = PACKAGES.find(p => p.id === r.pacote);
+  return `🔔 Nova reserva pelo site!\n\nResponsável: ${r.responsavel}\nWhatsApp: ${r.whatsapp}\nAniversariante: ${r.aniversariante || "-"}\nPacote: ${pkg?.name || ""}\nData desejada: ${r.data ? new Date(r.data + "T12:00:00").toLocaleDateString("pt-BR") : ""}\nHorário: ${r.horario || "-"}\nConvidados: ${(r.adultos||0) + (r.criancas||0)} (${r.adultos||0} adultos + ${r.criancas||0} crianças)\nEspaço: ${r.espaco || "A definir"}\nValor: ${r.valor > 0 ? "R$ " + r.valor.toLocaleString("pt-BR") : "Gratuito"}`;
 }
 
 function StatusBadge({ status }) {
@@ -719,7 +731,8 @@ function BookingForm({ packageId, availability, blockedDates, onBooked, onNaviga
 
   if (submitted && newRes) {
     const msg = buildMessage(newRes);
-    const link = whatsappLink(newRes.whatsapp, msg);
+    const customerLink = whatsappLink(newRes.whatsapp, msg);
+    const staffLink = whatsappLink(BUSINESS_WHATSAPP, buildStaffNotification(newRes));
     return (
       <div style={{ minHeight:"100vh", background:"#0F172A", padding:"32px 16px", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:16 }}>
         <div style={{ fontSize:60 }}>🎉</div>
@@ -729,15 +742,19 @@ function BookingForm({ packageId, availability, blockedDates, onBooked, onNaviga
         <p style={{ color:"#94A3B8", textAlign:"center", fontSize:14 }}>
           {newRes.valor > 0
             ? "Aguardando confirmação do comprovante de pagamento pela administração."
-            : "Envie a confirmação pelo WhatsApp para o cliente."}
+            : "Toque nos botões abaixo pra guardar sua confirmação e avisar o Central Food Park pelo WhatsApp."}
         </p>
         <div style={{ background:"#1E293B", borderRadius:14, padding:16, width:"100%", maxWidth:400 }}>
           <div style={{ color:"#64748B", fontSize:11, fontWeight:700, marginBottom:8, textTransform:"uppercase" }}>Mensagem automática</div>
           <pre style={{ color:"#E2E8F0", fontSize:12, whiteSpace:"pre-wrap", margin:0, lineHeight:1.6 }}>{msg}</pre>
         </div>
-        <a href={link} target="_blank" rel="noreferrer"
+        <a href={customerLink} target="_blank" rel="noreferrer"
           style={{ background:"#25D366", borderRadius:14, padding:"14px 28px", color:"#fff", fontWeight:800, fontSize:15, textDecoration:"none", display:"flex", alignItems:"center", gap:8 }}>
-          📱 Enviar pelo WhatsApp
+          📱 Enviar confirmação pra mim
+        </a>
+        <a href={staffLink} target="_blank" rel="noreferrer"
+          style={{ background:"#128C7E", borderRadius:14, padding:"14px 28px", color:"#fff", fontWeight:800, fontSize:15, textDecoration:"none", display:"flex", alignItems:"center", gap:8 }}>
+          📤 Avisar o Central Food Park
         </a>
         <button onClick={() => onNavigate("home")}
           style={{ background:"transparent", border:"1px solid #334155", borderRadius:12, padding:"12px 24px", color:"#94A3B8", fontSize:14, cursor:"pointer" }}>
@@ -877,14 +894,14 @@ function BookingForm({ packageId, availability, blockedDates, onBooked, onNaviga
               <div style={{ color:"#FCD34D", fontSize:13, fontWeight:700, marginBottom:4 }}>📱 Após o pagamento:</div>
               <div style={{ color:"#FEF3C7", fontSize:13, lineHeight:1.6 }}>
                 Envie o comprovante para nosso WhatsApp:<br/>
-                <strong style={{ color:"#FCD34D" }}>(48) 99653-1583</strong>
+                <strong style={{ color:"#FCD34D" }}>{BUSINESS_WHATSAPP}</strong>
               </div>
             </div>
             <label style={{ display:"flex", alignItems:"flex-start", gap:10, cursor:"pointer" }}>
               <input type="checkbox" checked={form.pixConfirmado} onChange={e => set("pixConfirmado", e.target.checked)}
                 style={{ width:18, height:18, marginTop:2, cursor:"pointer", accentColor:"#10B981" }} />
               <span style={{ color:"#E2E8F0", fontSize:13, lineHeight:1.5 }}>
-                Declaro que realizei o pagamento e enviarei o comprovante pelo WhatsApp <strong style={{ color:"#6EE7B7" }}>(48) 99653-1583</strong>
+                Declaro que realizei o pagamento e enviarei o comprovante pelo WhatsApp <strong style={{ color:"#6EE7B7" }}>{BUSINESS_WHATSAPP}</strong>
               </span>
             </label>
             <div style={{ background:"#1E293B", border:"1.5px solid #475569", borderRadius:10, padding:12 }}>
@@ -1280,7 +1297,7 @@ function Admin({ onNavigate }) {
         <p style={{ color:"#94A3B8", textAlign:"center", fontSize:15, lineHeight:1.7 }}>
           Nossa equipe está pronta para te ajudar a escolher o pacote ideal e tirar todas as suas dúvidas!
         </p>
-        <a href="https://wa.me/5548996531583?text=Olá!%20Gostaria%20de%20informações%20sobre%20reservas%20no%20Central%20Food%20Park." target="_blank" rel="noreferrer"
+        <a href={whatsappLink(BUSINESS_WHATSAPP, "Olá! Gostaria de informações sobre reservas no Central Food Park.")} target="_blank" rel="noreferrer"
           style={{ background:"#25D366", borderRadius:14, padding:"16px 32px", color:"#fff", fontWeight:800, fontSize:16, textDecoration:"none", display:"flex", alignItems:"center", gap:10 }}>
           📱 Abrir WhatsApp
         </a>
