@@ -332,7 +332,10 @@ function whatsappLink(phone, msg) {
 
 function buildMessage(r) {
   const pkg = PACKAGES.find(p => p.id === r.pacote);
-  return `Olá! Seja bem-vindo ao Central Food Park 🎉\n\nRecebemos sua solicitação de reserva.\n\nPacote escolhido: ${pkg?.name || ""}\nData desejada: ${r.data ? new Date(r.data + "T12:00:00").toLocaleDateString("pt-BR") : ""}\nHorário: ${r.horario}\nQuantidade de convidados: ${(r.adultos||0) + (r.criancas||0)} (${r.adultos||0} adultos + ${r.criancas||0} crianças)\nEspaço reservado: ${r.espaco || "A definir"}\n\nNossa equipe irá confirmar a disponibilidade da data e enviar as informações para pagamento da reserva.\n\nCentral Food Park\nO lugar perfeito para comemorar momentos especiais! 🎊`;
+  const proximoPasso = pkg && pkg.valorNum > 0
+    ? "Nossa equipe irá confirmar a disponibilidade da data e o recebimento do pagamento da reserva."
+    : "Nossa equipe irá confirmar a disponibilidade da data e retornar com a confirmação da sua reserva.";
+  return `Olá! Seja bem-vindo ao Central Food Park 🎉\n\nRecebemos sua solicitação de reserva.\n\nPacote escolhido: ${pkg?.name || ""}\nData desejada: ${r.data ? new Date(r.data + "T12:00:00").toLocaleDateString("pt-BR") : ""}\nHorário: ${r.horario}\nQuantidade de convidados: ${(r.adultos||0) + (r.criancas||0)} (${r.adultos||0} adultos + ${r.criancas||0} crianças)\nEspaço reservado: ${r.espaco || "A definir"}\n\n${proximoPasso}\n\nCentral Food Park\nO lugar perfeito para comemorar momentos especiais! 🎊`;
 }
 
 function StatusBadge({ status }) {
