@@ -375,28 +375,10 @@ function buildConfirmationMessage(r) {
 // database and opens WhatsApp with the confirmation message ready to send
 // to the customer. Used by both the 2-day alert quick-actions and the
 // regular status dropdown in the Reservations admin list.
-async function confirmReservationAndNotify(r, onDone) {
-  // Open the tab synchronously (still inside the click's user-gesture),
-  // then navigate it once the update finishes — opening it after the
-  // `await` would get silently blocked as a pop-up by most browsers.
-  const win = window.open("", "_blank", "noopener,noreferrer");
-  await supabase.from("reservations").update({ status: "Confirmada" }).eq("id", r.id);
-  onDone?.();
-  if (win) win.location.href = whatsappLink(r.whatsapp, buildConfirmationMessage(r));
-}
-
 // Message sent to the customer when the admin cancels their reservation.
 function buildCancellationMessage(r) {
   const pkg = PACKAGES.find(p => p.id === r.pacote);
   return `❌ Reserva cancelada\n\nOlá ${r.responsavel}, sua reserva no Central Food Park foi cancelada.\n\nPacote: ${pkg?.name || ""}\nData: ${r.data ? new Date(r.data + "T12:00:00").toLocaleDateString("pt-BR") : ""}\n\nSe isso foi um engano ou você quiser reagendar, é só chamar a gente por aqui.\n\nCentral Food Park`;
-}
-
-// Same pattern as confirmReservationAndNotify, but for cancellations.
-async function cancelReservationAndNotify(r, onDone) {
-  const win = window.open("", "_blank", "noopener,noreferrer");
-  await supabase.from("reservations").update({ status: "Cancelada" }).eq("id", r.id);
-  onDone?.();
-  if (win) win.location.href = whatsappLink(r.whatsapp, buildCancellationMessage(r));
 }
 
 // Message sent to the customer once their reservation is marked Finalizada
@@ -406,12 +388,36 @@ function buildFinalizationMessage(r) {
   return `🎉 Obrigado por escolher o Central Food Park!\n\nOlá ${r.responsavel}, esperamos que ${r.aniversariante ? r.aniversariante : "vocês"} tenham aproveitado muito a comemoração${pkg?.name ? ` (${pkg.name})` : ""}!\n\nFoi um prazer receber vocês. Esperamos ver todos de novo em breve! 🎊\n\nCentral Food Park`;
 }
 
-// Same pattern as confirmReservationAndNotify, but for finalized reservations.
-async function finalizeReservationAndNotify(r, onDone) {
+// Shared implementation behind confirm/cancel/finalize: updates the status
+// in Supabase and, only if that actually succeeds, opens WhatsApp with the
+// matching message. The tab is opened synchronously (still inside the
+// click/change user-gesture) and only navigated afterwards — opening it
+// after the `await` would get silently blocked as a pop-up by most
+// browsers. If the update fails (auth/RLS/network), the tab is closed and
+// the error is surfaced instead of failing silently.
+async function setStatusAndNotify(r, status, buildMsg, onDone) {
   const win = window.open("", "_blank", "noopener,noreferrer");
-  await supabase.from("reservations").update({ status: "Finalizada" }).eq("id", r.id);
+  const { error } = await supabase.from("reservations").update({ status }).eq("id", r.id);
+  if (error) {
+    console.error(`Falha ao mudar status para "${status}":`, error);
+    if (win) win.close();
+    alert(`Não foi possível atualizar o status para "${status}".${error.message ? "\n\nDetalhe: " + error.message : " Tente novamente."}`);
+    return;
+  }
   onDone?.();
-  if (win) win.location.href = whatsappLink(r.whatsapp, buildFinalizationMessage(r));
+  if (win) win.location.href = whatsappLink(r.whatsapp, buildMsg(r));
+}
+
+async function confirmReservationAndNotify(r, onDone) {
+  await setStatusAndNotify(r, "Confirmada", buildConfirmationMessage, onDone);
+}
+
+async function cancelReservationAndNotify(r, onDone) {
+  await setStatusAndNotify(r, "Cancelada", buildCancellationMessage, onDone);
+}
+
+async function finalizeReservationAndNotify(r, onDone) {
+  await setStatusAndNotify(r, "Finalizada", buildFinalizationMessage, onDone);
 }
 
 function StatusBadge({ status }) {
