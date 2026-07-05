@@ -1128,6 +1128,61 @@ function Calendar({ reservations, blockedDates, onBlockedChange, onNavigate }) {
 function Reservations({ reservations, onStatusChange, onNavigate }) {
   const [filter, setFilter] = useState("Todas");
   const [search, setSearch] = useState("");
+  const [editingId, setEditingId] = useState(null);
+  const [editForm, setEditForm] = useState({});
+  const [saving, setSaving] = useState(false);
+
+  function startEdit(r) {
+    setEditingId(r.id);
+    setEditForm({
+      responsavel: r.responsavel || "",
+      whatsapp: r.whatsapp || "",
+      aniversariante: r.aniversariante || "",
+      pacote: r.pacote,
+      data: r.data || "",
+      horario: r.horario || "",
+      adultos: r.adultos ?? 0,
+      criancas: r.criancas ?? 0,
+      espaco: r.espaco || "",
+      pagamento: r.pagamento || "PIX",
+      valor: r.valor ?? 0,
+      obs: r.obs || "",
+    });
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setEditForm({});
+  }
+
+  async function saveEdit(id) {
+    setSaving(true);
+    const { error } = await supabase.from("reservations").update({
+      responsavel: editForm.responsavel,
+      whatsapp: editForm.whatsapp,
+      aniversariante: editForm.aniversariante,
+      pacote: Number(editForm.pacote),
+      data: editForm.data,
+      horario: editForm.horario,
+      adultos: Number(editForm.adultos) || 0,
+      criancas: Number(editForm.criancas) || 0,
+      espaco: editForm.espaco,
+      pagamento: editForm.pagamento,
+      valor: Number(editForm.valor) || 0,
+      obs: editForm.obs,
+    }).eq("id", id);
+    setSaving(false);
+    if (error) {
+      if (error.code === "23505") {
+        alert("Já existe outra reserva ativa nessa data para esse espaço/pacote. Escolha outra data ou espaço.");
+      } else {
+        alert("Não foi possível salvar as alterações. Tente novamente.");
+      }
+      return;
+    }
+    setEditingId(null);
+    onStatusChange?.();
+  }
 
   const statuses = ["Todas", ...Object.keys(STATUS_COLORS)];
 
@@ -1217,6 +1272,83 @@ function Reservations({ reservations, onStatusChange, onNavigate }) {
           const pkg = PACKAGES.find(p => p.id === r.pacote);
           const msg = buildMessage(r);
           const link = whatsappLink(r.whatsapp, msg);
+          const editInputStyle = { background:"#0F172A", border:"1px solid #334155", borderRadius:8, padding:"8px 10px", color:"#F1F5F9", fontSize:13, width:"100%", boxSizing:"border-box", outline:"none" };
+          const editLabelStyle = { color:"#64748B", fontSize:11, fontWeight:700, textTransform:"uppercase", marginBottom:4, display:"block" };
+          const set = (k, v) => setEditForm(f => ({ ...f, [k]: v }));
+
+          if (editingId === r.id) {
+            return (
+              <div key={r.id} style={{ background:"#1E293B", borderRadius:14, padding:16, border:"1.5px solid #3B82F6" }}>
+                <div style={{ color:"#60A5FA", fontWeight:800, fontSize:13, marginBottom:12, textTransform:"uppercase" }}>✏️ Editando reserva</div>
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:10 }}>
+                  <div>
+                    <label style={editLabelStyle}>Responsável</label>
+                    <input value={editForm.responsavel} onChange={e => set("responsavel", e.target.value)} style={editInputStyle} />
+                  </div>
+                  <div>
+                    <label style={editLabelStyle}>WhatsApp</label>
+                    <input value={editForm.whatsapp} onChange={e => set("whatsapp", e.target.value)} style={editInputStyle} />
+                  </div>
+                  <div>
+                    <label style={editLabelStyle}>Aniversariante</label>
+                    <input value={editForm.aniversariante} onChange={e => set("aniversariante", e.target.value)} style={editInputStyle} />
+                  </div>
+                  <div>
+                    <label style={editLabelStyle}>Pacote</label>
+                    <select value={editForm.pacote} onChange={e => set("pacote", e.target.value)} style={editInputStyle}>
+                      {PACKAGES.map(p => <option key={p.id} value={p.id}>{p.emoji} {p.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={editLabelStyle}>Data</label>
+                    <input type="date" value={editForm.data} onChange={e => set("data", e.target.value)} style={editInputStyle} />
+                  </div>
+                  <div>
+                    <label style={editLabelStyle}>Horário</label>
+                    <input type="time" value={editForm.horario} onChange={e => set("horario", e.target.value)} style={editInputStyle} />
+                  </div>
+                  <div>
+                    <label style={editLabelStyle}>Adultos</label>
+                    <input type="number" value={editForm.adultos} onChange={e => set("adultos", e.target.value)} style={editInputStyle} />
+                  </div>
+                  <div>
+                    <label style={editLabelStyle}>Crianças</label>
+                    <input type="number" value={editForm.criancas} onChange={e => set("criancas", e.target.value)} style={editInputStyle} />
+                  </div>
+                  <div>
+                    <label style={editLabelStyle}>Espaço</label>
+                    <input value={editForm.espaco} onChange={e => set("espaco", e.target.value)} style={editInputStyle} placeholder="ex: s1, pkg-3..." />
+                  </div>
+                  <div>
+                    <label style={editLabelStyle}>Valor (R$)</label>
+                    <input type="number" value={editForm.valor} onChange={e => set("valor", e.target.value)} style={editInputStyle} />
+                  </div>
+                  <div>
+                    <label style={editLabelStyle}>Pagamento</label>
+                    <select value={editForm.pagamento} onChange={e => set("pagamento", e.target.value)} style={editInputStyle}>
+                      <option value="PIX">PIX</option>
+                      <option value="Cartão">Cartão</option>
+                    </select>
+                  </div>
+                </div>
+                <div style={{ marginBottom:12 }}>
+                  <label style={editLabelStyle}>Observações</label>
+                  <textarea value={editForm.obs} onChange={e => set("obs", e.target.value)} rows={2} style={{ ...editInputStyle, resize:"vertical" }} />
+                </div>
+                <div style={{ display:"flex", gap:8 }}>
+                  <button onClick={() => saveEdit(r.id)} disabled={saving}
+                    style={{ background:"#3B82F6", border:"none", borderRadius:8, padding:"8px 16px", color:"#fff", fontWeight:700, fontSize:13, cursor: saving ? "default" : "pointer", opacity: saving ? 0.7 : 1, flex:1 }}>
+                    {saving ? "Salvando..." : "💾 Salvar"}
+                  </button>
+                  <button onClick={cancelEdit} disabled={saving}
+                    style={{ background:"transparent", border:"1px solid #334155", borderRadius:8, padding:"8px 16px", color:"#94A3B8", fontWeight:600, fontSize:13, cursor:"pointer" }}>
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            );
+          }
+
           return (
             <div key={r.id} style={{ background:"#1E293B", borderRadius:14, padding:16 }}>
               <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:10 }}>
@@ -1246,6 +1378,10 @@ function Reservations({ reservations, onStatusChange, onNavigate }) {
                   style={{ background:"#0F172A", border:"1px solid #334155", borderRadius:8, padding:"6px 10px", color:"#CBD5E1", fontSize:12, cursor:"pointer", flex:1 }}>
                   {Object.keys(STATUS_COLORS).map(s => <option key={s}>{s}</option>)}
                 </select>
+                <button onClick={() => startEdit(r)}
+                  style={{ background:"#334155", border:"none", borderRadius:8, padding:"6px 14px", color:"#F1F5F9", fontWeight:700, fontSize:12, cursor:"pointer" }}>
+                  ✏️ Editar
+                </button>
                 <a href={link} target="_blank" rel="noreferrer"
                   style={{ background:"#25D366", borderRadius:8, padding:"6px 14px", color:"#fff", fontWeight:700, fontSize:12, textDecoration:"none", display:"flex", alignItems:"center", gap:4 }}>
                   📱 WhatsApp
