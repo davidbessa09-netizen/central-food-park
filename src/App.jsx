@@ -779,10 +779,11 @@ function BookingForm({ packageId, availability, blockedDates, onBooked, onNaviga
     setSending(false);
 
     if (error) {
+      console.error("Falha ao criar reserva:", error);
       if (error.code === "23505") {
         alert("Essa data/área acabou de ser reservada por outra pessoa. Escolha outra data.");
       } else {
-        alert("Não foi possível enviar a reserva. Tente novamente em instantes.");
+        alert(`Não foi possível enviar a reserva. Tente novamente em instantes.${error.message ? "\n\nDetalhe: " + error.message : ""}`);
       }
       return;
     }
