@@ -1184,6 +1184,13 @@ function Reservations({ reservations, onStatusChange, onNavigate }) {
     onStatusChange?.();
   }
 
+  async function deleteReservation(r) {
+    const ok = window.confirm(`Excluir de vez a reserva de ${r.responsavel || "este cliente"}? Essa ação não pode ser desfeita.`);
+    if (!ok) return;
+    await supabase.from("reservations").delete().eq("id", r.id);
+    onStatusChange?.();
+  }
+
   const statuses = ["Todas", ...Object.keys(STATUS_COLORS)];
 
   const today = new Date();
@@ -1386,6 +1393,10 @@ function Reservations({ reservations, onStatusChange, onNavigate }) {
                   style={{ background:"#25D366", borderRadius:8, padding:"6px 14px", color:"#fff", fontWeight:700, fontSize:12, textDecoration:"none", display:"flex", alignItems:"center", gap:4 }}>
                   📱 WhatsApp
                 </a>
+                <button onClick={() => deleteReservation(r)}
+                  style={{ background:"#EF444422", border:"1.5px solid #EF4444", borderRadius:8, padding:"6px 14px", color:"#EF4444", fontWeight:700, fontSize:12, cursor:"pointer" }}>
+                  🗑️ Excluir
+                </button>
               </div>
             </div>
           );
