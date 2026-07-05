@@ -309,6 +309,21 @@ function isSlotTaken(rows, data, espacoId) {
   return rows.some(r => r.data === data && r.espaco === espacoId && r.status !== "Cancelada");
 }
 
+// Friendly, full space name for display (e.g. "Mesa frente ao Palco (A)")
+// instead of the raw stored id (e.g. "s3" or "pkg-3"). Prefers the name
+// saved on the reservation itself; falls back to looking it up for older
+// records or ones edited by hand.
+function spaceLabel(r) {
+  if (r.espaco_nome) return r.espaco_nome;
+  const sp = SPACES_GRATUITO.find(s => s.id === r.espaco);
+  if (sp) return sp.name;
+  if (r.espaco && r.espaco.startsWith("pkg-")) {
+    const pkg = PACKAGES.find(p => p.id === Number(r.espaco.replace("pkg-", "")));
+    if (pkg) return pkg.name;
+  }
+  return r.espaco || null;
+}
+
 const RULES = [
   "Reservas pagas: a confirmação é feita mediante pagamento integral do valor do pacote escolhido.",
   "Alterações de data dependem de disponibilidade.",
@@ -340,20 +355,20 @@ function buildMessage(r) {
   const proximoPasso = pkg && pkg.valorNum > 0
     ? "Nossa equipe irá confirmar a disponibilidade da data e o recebimento do pagamento da reserva."
     : "Nossa equipe irá confirmar a disponibilidade da data e retornar com a confirmação da sua reserva.";
-  return `Olá! Seja bem-vindo ao Central Food Park 🎉\n\nRecebemos sua solicitação de reserva.\n\nPacote escolhido: ${pkg?.name || ""}\nData desejada: ${r.data ? new Date(r.data + "T12:00:00").toLocaleDateString("pt-BR") : ""}\nHorário: ${r.horario}\nQuantidade de convidados: ${(r.adultos||0) + (r.criancas||0)} (${r.adultos||0} adultos + ${r.criancas||0} crianças)\nEspaço reservado: ${r.espaco || "A definir"}\n\n${proximoPasso}\n\nCentral Food Park\nO lugar perfeito para comemorar momentos especiais! 🎊`;
+  return `Olá! Seja bem-vindo ao Central Food Park 🎉\n\nRecebemos sua solicitação de reserva.\n\nPacote escolhido: ${pkg?.name || ""}\nData desejada: ${r.data ? new Date(r.data + "T12:00:00").toLocaleDateString("pt-BR") : ""}\nHorário: ${r.horario}\nQuantidade de convidados: ${(r.adultos||0) + (r.criancas||0)} (${r.adultos||0} adultos + ${r.criancas||0} crianças)\nEspaço reservado: ${spaceLabel(r) || "A definir"}\n\n${proximoPasso}\n\nCentral Food Park\nO lugar perfeito para comemorar momentos especiais! 🎊`;
 }
 
 // Notification copy sent (by the customer, with one tap) to the business's
 // own WhatsApp number, so staff find out about a new reservation right away.
 function buildStaffNotification(r) {
   const pkg = PACKAGES.find(p => p.id === r.pacote);
-  return `🔔 Nova reserva pelo site!\n\nResponsável: ${r.responsavel}\nWhatsApp: ${r.whatsapp}\nAniversariante: ${r.aniversariante || "-"}\nPacote: ${pkg?.name || ""}\nData desejada: ${r.data ? new Date(r.data + "T12:00:00").toLocaleDateString("pt-BR") : ""}\nHorário: ${r.horario || "-"}\nConvidados: ${(r.adultos||0) + (r.criancas||0)} (${r.adultos||0} adultos + ${r.criancas||0} crianças)\nEspaço: ${r.espaco || "A definir"}\nValor: ${r.valor > 0 ? "R$ " + r.valor.toLocaleString("pt-BR") : "Gratuito"}`;
+  return `🔔 Nova reserva pelo site!\n\nResponsável: ${r.responsavel}\nWhatsApp: ${r.whatsapp}\nAniversariante: ${r.aniversariante || "-"}\nPacote: ${pkg?.name || ""}\nData desejada: ${r.data ? new Date(r.data + "T12:00:00").toLocaleDateString("pt-BR") : ""}\nHorário: ${r.horario || "-"}\nConvidados: ${(r.adultos||0) + (r.criancas||0)} (${r.adultos||0} adultos + ${r.criancas||0} crianças)\nEspaço: ${spaceLabel(r) || "A definir"}\nValor: ${r.valor > 0 ? "R$ " + r.valor.toLocaleString("pt-BR") : "Gratuito"}`;
 }
 
 // Message sent to the customer once the admin confirms their reservation.
 function buildConfirmationMessage(r) {
   const pkg = PACKAGES.find(p => p.id === r.pacote);
-  return `✅ Reserva confirmada!\n\nOlá ${r.responsavel}, sua reserva no Central Food Park está confirmada!\n\nPacote: ${pkg?.name || ""}\nData: ${r.data ? new Date(r.data + "T12:00:00").toLocaleDateString("pt-BR") : ""}\nHorário: ${r.horario || "-"}\nEspaço: ${r.espaco_nome || r.espaco || "-"}\n\nEstamos ansiosos para receber vocês! 🎉\n\nCentral Food Park`;
+  return `✅ Reserva confirmada!\n\nOlá ${r.responsavel}, sua reserva no Central Food Park está confirmada!\n\nPacote: ${pkg?.name || ""}\nData: ${r.data ? new Date(r.data + "T12:00:00").toLocaleDateString("pt-BR") : ""}\nHorário: ${r.horario || "-"}\nEspaço: ${spaceLabel(r) || "-"}\n\nEstamos ansiosos para receber vocês! 🎉\n\nCentral Food Park`;
 }
 
 // Shared "confirm" action: marks the reservation as Confirmada in the
@@ -1371,7 +1386,7 @@ function Reservations({ reservations, onStatusChange, onNavigate }) {
                   ["⏰",r.horario||"—"],
                   ["📦",`${pkg?.emoji||""} ${pkg?.name||"—"}`],
                   ["👥",`${r.adultos||0}A + ${r.criancas||0}C`],
-                  ["📍",r.espaco||"—"],
+                  ["📍",spaceLabel(r) || "—"],
                   ["💰",r.valor>0?`R$ ${r.valor.toLocaleString("pt-BR")}`:"Gratuito"],
                 ].map(([ic,val],i) => (
                   <div key={i} style={{ display:"flex", gap:6, alignItems:"center" }}>
